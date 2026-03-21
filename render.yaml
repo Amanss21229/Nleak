@@ -1,0 +1,13 @@
+services:
+  - type: worker
+    name: telegram-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 artifacts/telegram-bot/bot.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_GROUP_CHAT_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
