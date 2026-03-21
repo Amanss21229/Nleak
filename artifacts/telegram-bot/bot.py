@@ -34,6 +34,45 @@ async def get_db():
     return db_pool
 
 
+async def init_db():
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS bot_users (
+                user_id BIGINT PRIMARY KEY,
+                username TEXT DEFAULT '',
+                first_name TEXT DEFAULT '',
+                last_name TEXT DEFAULT '',
+                mobile TEXT DEFAULT '',
+                alt_mobile TEXT DEFAULT '',
+                gmail TEXT DEFAULT '',
+                alt_gmail TEXT DEFAULT '',
+                referred_by BIGINT,
+                is_verified BOOLEAN DEFAULT FALSE,
+                verified_at TIMESTAMPTZ,
+                data_submitted BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS referrals (
+                id SERIAL PRIMARY KEY,
+                referrer_id BIGINT NOT NULL REFERENCES bot_users(user_id),
+                referred_id BIGINT NOT NULL REFERENCES bot_users(user_id),
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (referrer_id, referred_id)
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS message_map (
+                group_msg_id BIGINT PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES bot_users(user_id),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+    logger.info("Database tables ready.")
+
+
 async def ensure_user(user_id: int, username: str, first_name: str, last_name: str, referred_by: int = None):
     pool = await get_db()
     async with pool.acquire() as conn:
@@ -534,8 +573,12 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     await forward_user_message_to_group(update, context)
 
 
+async def post_init(application):
+    await init_db()
+
+
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("fill", fill_start)],
