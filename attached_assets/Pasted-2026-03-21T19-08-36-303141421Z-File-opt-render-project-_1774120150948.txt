@@ -1,0 +1,50 @@
+2026-03-21T19:08:36.303141421Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/ext/_utils/networkloop.py", line 161, in network_retry_loop
+2026-03-21T19:08:36.303155731Z     await do_action()
+2026-03-21T19:08:36.303159142Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/ext/_utils/networkloop.py", line 154, in do_action
+2026-03-21T19:08:36.303162952Z     action_cb_task.result()
+2026-03-21T19:08:36.303165812Z     ~~~~~~~~~~~~~~~~~~~~~^^
+2026-03-21T19:08:36.303185753Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+2026-03-21T19:08:36.303189264Z     updates = await self.bot.get_updates(
+2026-03-21T19:08:36.303192274Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-21T19:08:36.303195354Z     ...<3 lines>...
+2026-03-21T19:08:36.303198364Z     )
+2026-03-21T19:08:36.303201464Z     ^
+2026-03-21T19:08:36.303204464Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/ext/_extbot.py", line 672, in get_updates
+2026-03-21T19:08:36.303207585Z     updates = await super().get_updates(
+2026-03-21T19:08:36.303210365Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-21T19:08:36.303213505Z     ...<9 lines>...
+2026-03-21T19:08:36.303216135Z     )
+2026-03-21T19:08:36.303219185Z     ^
+2026-03-21T19:08:36.303222815Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/_bot.py", line 4865, in get_updates
+2026-03-21T19:08:36.303225686Z     await self._post(
+2026-03-21T19:08:36.303228496Z     ^^^^^^^^^^^^^^^^^
+2026-03-21T19:08:36.303231216Z     ...<7 lines>...
+2026-03-21T19:08:36.303233976Z     ),
+2026-03-21T19:08:36.303236726Z     ^
+2026-03-21T19:08:36.303239606Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/_bot.py", line 704, in _post
+2026-03-21T19:08:36.303242436Z     return await self._do_post(
+2026-03-21T19:08:36.303245337Z            ^^^^^^^^^^^^^^^^^^^^
+2026-03-21T19:08:36.303248037Z     ...<6 lines>...
+2026-03-21T19:08:36.303250847Z     )
+2026-03-21T19:08:36.303253577Z     ^
+2026-03-21T19:08:36.303256467Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/ext/_extbot.py", line 370, in _do_post
+2026-03-21T19:08:36.303259297Z     return await super()._do_post(
+2026-03-21T19:08:36.303262048Z            ^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-21T19:08:36.303264938Z     ...<6 lines>...
+2026-03-21T19:08:36.303267548Z     )
+2026-03-21T19:08:36.303270288Z     ^
+2026-03-21T19:08:36.303273258Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/_bot.py", line 733, in _do_post
+2026-03-21T19:08:36.303276118Z     result = await request.post(
+2026-03-21T19:08:36.303278999Z              ^^^^^^^^^^^^^^^^^^^
+2026-03-21T19:08:36.303281839Z     ...<6 lines>...
+2026-03-21T19:08:36.303284549Z     )
+2026-03-21T19:08:36.303287259Z     ^
+2026-03-21T19:08:36.303290069Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/request/_baserequest.py", line 198, in post
+2026-03-21T19:08:36.30329295Z     result = await self._request_wrapper(
+2026-03-21T19:08:36.30329571Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-21T19:08:36.30329851Z     ...<7 lines>...
+2026-03-21T19:08:36.30330121Z     )
+2026-03-21T19:08:36.30330419Z     ^
+2026-03-21T19:08:36.30330714Z   File "/opt/render/project/src/.venv/lib/python3.14/site-packages/telegram/request/_baserequest.py", line 375, in _request_wrapper
+2026-03-21T19:08:36.303309791Z     raise exception
+2026-03-21T19:08:36.303312541Z telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
