@@ -4,6 +4,28 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## Telegram Bot (`artifacts/telegram-bot/bot.py`)
+
+Python-based Telegram bot for NEET 2026 question paper distribution.
+
+### Features
+- `/start` — Welcome message with referral link; mentions 3 referrals are compulsory for PDF
+- `/fill` — 4-step data collection form (mobile, alt mobile, gmail, alt gmail)
+- `/status` — Shows referral count and verification status
+- Referral system: 3 unique referrals triggers auto-verification message
+- All user messages forwarded to admin group with sender name/ID
+- Admin can reply in group to any forwarded message → reply goes to original user via bot
+- All user data forwarded to admin group on form submission
+
+### Database Tables
+- `bot_users` — Stores user info, contact details, verification status
+- `referrals` — Tracks referral relationships
+- `message_map` — Maps group message IDs to user IDs (for reply routing)
+
+### Secrets Required
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_GROUP_CHAT_ID`
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

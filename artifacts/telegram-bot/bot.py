@@ -80,6 +80,24 @@ async def mark_verified(user_id: int):
         )
 
 
+async def save_message_map(group_msg_id: int, user_id: int):
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO message_map (group_msg_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            group_msg_id, user_id
+        )
+
+
+async def get_user_id_for_group_msg(group_msg_id: int):
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT user_id FROM message_map WHERE group_msg_id = $1", group_msg_id
+        )
+        return row["user_id"] if row else None
+
+
 async def check_and_notify_referrer(context, referred_by: int):
     if not referred_by:
         return
@@ -92,16 +110,145 @@ async def check_and_notify_referrer(context, referred_by: int):
                 chat_id=referred_by,
                 text=(
                     "🎉 *Congratulations! Aap Verified Ho Gaye!*\n\n"
-                    "Thank you! Aapke 3 unique referrals complete ho gaye hain.\n\n"
-                    "✅ *Ab aap verified hain!* Agar possible hua, to hum aapko *2 May 2026 ko raat 10 baje* "
-                    "NEET 2026 Question Paper ki PDF bhej denge.\n\n"
-                    "📢 *Yaad rahe:* Jitna zyada aap refer karenge, utna jaldi aapko paper send kiya jaayega! "
+                    "Shukriya! Aapke *3 unique referrals* complete ho gaye hain.\n\n"
+                    "✅ *Ab aap verified hain!* Hum aapko *2 May 2026 raat 10 baje* "
+                    "NEET 2026 Question Paper ki PDF bhejne ki koshish karenge.\n\n"
+                    "📢 *Yaad rahe:* Jitna zyada aap refer karenge, utna *pehle* aapko paper send kiya jaayega!\n\n"
                     "Referral karte rahiye aur apna chance badhaiye! 🚀"
                 ),
                 parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Failed to send verification message to {referred_by}: {e}")
+
+
+async def forward_user_message_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Forward every user message to the group with sender info label, then map the forwarded msg."""
+    user = update.effective_user
+    message = update.effective_message
+
+    if not message:
+        return
+
+    try:
+        label_text = (
+            f"📨 *Message from user:*\n"
+            f"👤 *Name:* {user.first_name or ''} {user.last_name or ''}".strip() + "\n"
+            f"🔖 *Username:* @{user.username}" if user.username else
+            f"📨 *Message from user:*\n"
+            f"👤 *Name:* {user.first_name or ''} {user.last_name or ''}".strip() + "\n"
+            f"🔖 *Username:* (no username)"
+        ) + f"\n🆔 *User ID:* `{user.id}`"
+
+        label_msg = await context.bot.send_message(
+            chat_id=GROUP_CHAT_ID,
+            text=label_text,
+            parse_mode="Markdown"
+        )
+
+        forwarded = await message.forward(chat_id=GROUP_CHAT_ID)
+
+        await save_message_map(label_msg.message_id, user.id)
+        await save_message_map(forwarded.message_id, user.id)
+
+    except Exception as e:
+        logger.error(f"Failed to forward user message to group: {e}")
+
+
+async def handle_group_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """When admin replies in the group, forward that reply to the original user."""
+    message = update.effective_message
+
+    if not message or not message.reply_to_message:
+        return
+
+    if update.effective_chat.id != GROUP_CHAT_ID:
+        return
+
+    replied_to_msg_id = message.reply_to_message.message_id
+    target_user_id = await get_user_id_for_group_msg(replied_to_msg_id)
+
+    if not target_user_id:
+        return
+
+    try:
+        if message.text:
+            await context.bot.send_message(chat_id=target_user_id, text=message.text)
+        elif message.photo:
+            await context.bot.send_photo(
+                chat_id=target_user_id,
+                photo=message.photo[-1].file_id,
+                caption=message.caption or ""
+            )
+        elif message.video:
+            await context.bot.send_video(
+                chat_id=target_user_id,
+                video=message.video.file_id,
+                caption=message.caption or ""
+            )
+        elif message.document:
+            await context.bot.send_document(
+                chat_id=target_user_id,
+                document=message.document.file_id,
+                caption=message.caption or ""
+            )
+        elif message.audio:
+            await context.bot.send_audio(
+                chat_id=target_user_id,
+                audio=message.audio.file_id,
+                caption=message.caption or ""
+            )
+        elif message.voice:
+            await context.bot.send_voice(
+                chat_id=target_user_id,
+                voice=message.voice.file_id,
+                caption=message.caption or ""
+            )
+        elif message.sticker:
+            await context.bot.send_sticker(
+                chat_id=target_user_id,
+                sticker=message.sticker.file_id
+            )
+        elif message.animation:
+            await context.bot.send_animation(
+                chat_id=target_user_id,
+                animation=message.animation.file_id,
+                caption=message.caption or ""
+            )
+        elif message.video_note:
+            await context.bot.send_video_note(
+                chat_id=target_user_id,
+                video_note=message.video_note.file_id
+            )
+        elif message.poll:
+            poll = message.poll
+            options = [opt.text for opt in poll.options]
+            await context.bot.send_poll(
+                chat_id=target_user_id,
+                question=poll.question,
+                options=options,
+                is_anonymous=poll.is_anonymous,
+                type=poll.type,
+                allows_multiple_answers=poll.allows_multiple_answers
+            )
+        elif message.contact:
+            await context.bot.send_contact(
+                chat_id=target_user_id,
+                phone_number=message.contact.phone_number,
+                first_name=message.contact.first_name,
+                last_name=message.contact.last_name or ""
+            )
+        elif message.location:
+            await context.bot.send_location(
+                chat_id=target_user_id,
+                latitude=message.location.latitude,
+                longitude=message.location.longitude
+            )
+        else:
+            await message.forward(chat_id=target_user_id)
+
+    except Exception as e:
+        logger.error(f"Failed to send group reply to user {target_user_id}: {e}")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -131,16 +278,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         f"🙏 *Namaste {user.first_name}!*\n\n"
         "📚 *NEET 2026 Question Paper Bot mein aapka swagat hai!*\n\n"
-        "📅 *2 May 2026 ko aapko NEET ka paper send kiya jaayega.*\n\n"
+        "📅 *2 May 2026 ko NEET ka Question Paper PDF send kiya jaayega.*\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "📩 *PDF kaise paye?*\n"
-        "Agar aap bhi NEET 2026 Questions Paper ki PDF chahte hain, "
-        "to /fill pe click karke apni details bhej dein — "
-        "hum aapko PDF send kar denge!\n\n"
-        "🔗 *Apna Referral Link:*\n"
+        "⚠️ *PDF sirf VERIFIED users ko milegi!*\n\n"
+        "✅ Verified hone ke liye *minimum 3 unique users* ko refer karna *compulsory* hai.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "📩 *Abhi kya karein?*\n"
+        "1️⃣ /fill pe click karke apni details bhejein\n"
+        "2️⃣ Apna referral link share karein — *3 log join karein*\n"
+        "3️⃣ Verified hon aur 2 May ko PDF paayen! 🎯\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🔗 *Aapka Referral Link:*\n"
         f"`{referral_link}`\n\n"
-        "👥 *3 unique users ko refer karo aur verified ban jao!*\n"
-        "Jitna zyada refer karoge, utna jaldi paper milega! 🚀"
+        "👥 *Jitna zyada refer karoge, utna jaldi paper milega!* 🚀"
     )
 
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
@@ -156,7 +306,10 @@ async def fill_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text(
-        "📝 *Details Form - Step 1/4*\n\n"
+        "📝 *Details Form — Step 1/4*\n\n"
+        "⚠️ *Yaad rahe:* PDF sirf *verified users* ko milegi.\n"
+        "Verified hone ke liye *3 referrals compulsory* hain!\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
         "📱 *Apna Mobile Number bhejein* jis par PDF send ki jaayegi:\n\n"
         "_(Sirf number likhein, jaise: 9876543210)_",
         parse_mode="Markdown"
@@ -176,14 +329,12 @@ async def received_mobile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["mobile"] = mobile
 
-    keyboard = [[InlineKeyboardButton("⏭️ /skip", callback_data="skip_alt_mobile")]]
     await update.message.reply_text(
         "✅ Mobile number save ho gaya!\n\n"
         "📝 *Step 2/4*\n\n"
         "📱 *Alternative Mobile Number* (optional):\n"
         "Koi doosra number bhejein ya /skip karein:",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        parse_mode="Markdown"
     )
     return ALT_MOBILE
 
@@ -191,16 +342,13 @@ async def received_mobile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def received_alt_mobile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
 
-    if text == "/skip":
-        context.user_data["alt_mobile"] = ""
-    else:
-        if not text.isdigit() or len(text) < 8 or len(text) > 15:
-            await update.message.reply_text(
-                "❌ *Invalid number!* Kripya valid mobile number bhejein ya /skip karein.",
-                parse_mode="Markdown"
-            )
-            return ALT_MOBILE
-        context.user_data["alt_mobile"] = text
+    if not text.isdigit() or len(text) < 8 or len(text) > 15:
+        await update.message.reply_text(
+            "❌ *Invalid number!* Kripya valid mobile number bhejein ya /skip karein.",
+            parse_mode="Markdown"
+        )
+        return ALT_MOBILE
+    context.user_data["alt_mobile"] = text
 
     await update.message.reply_text(
         "✅ Saved!\n\n"
@@ -224,14 +372,12 @@ async def received_gmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["gmail"] = gmail
 
-    keyboard = [[InlineKeyboardButton("⏭️ /skip", callback_data="skip_alt_gmail")]]
     await update.message.reply_text(
         "✅ Gmail save ho gaya!\n\n"
         "📝 *Step 4/4*\n\n"
         "📧 *Alternative Gmail* (optional):\n"
         "Koi doosra Gmail bhejein ya /skip karein:",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        parse_mode="Markdown"
     )
     return ALT_GMAIL
 
@@ -239,38 +385,16 @@ async def received_gmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def received_alt_gmail(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().lower()
 
-    if text == "/skip":
-        context.user_data["alt_gmail"] = ""
-    else:
-        if "@" not in text or "." not in text:
-            await update.message.reply_text(
-                "❌ *Invalid email!* Kripya valid Gmail bhejein ya /skip karein.",
-                parse_mode="Markdown"
-            )
-            return ALT_GMAIL
-        context.user_data["alt_gmail"] = text
+    if "@" not in text or "." not in text:
+        await update.message.reply_text(
+            "❌ *Invalid email!* Kripya valid Gmail bhejein ya /skip karein.",
+            parse_mode="Markdown"
+        )
+        return ALT_GMAIL
+    context.user_data["alt_gmail"] = text
 
     await save_and_finish(update, context)
     return ConversationHandler.END
-
-
-async def skip_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    if text == "/skip":
-        state = context.user_data.get("_state")
-        if state == ALT_MOBILE:
-            context.user_data["alt_mobile"] = ""
-            await update.message.reply_text(
-                "✅ Skip kiya!\n\n"
-                "📝 *Step 3/4*\n\n"
-                "📧 *Apna Gmail address bhejein* jahan NEET 2026 Question Paper PDF bheja jaayega:",
-                parse_mode="Markdown"
-            )
-            return GMAIL
-        elif state == ALT_GMAIL:
-            context.user_data["alt_gmail"] = ""
-            await save_and_finish(update, context)
-            return ConversationHandler.END
 
 
 async def save_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -294,7 +418,7 @@ async def save_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_username = (await context.bot.get_me()).username
     referral_link = f"https://t.me/{bot_username}?start={user.id}"
 
-    username_display = f"@{user.username}" if user.username else f"{user.first_name or ''} {user.last_name or ''}".strip()
+    username_display = f"@{user.username}" if user.username else "N/A"
     full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
 
     forward_text = (
@@ -309,11 +433,12 @@ async def save_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        await context.bot.send_message(
+        data_msg = await context.bot.send_message(
             chat_id=GROUP_CHAT_ID,
             text=forward_text,
             parse_mode="Markdown"
         )
+        await save_message_map(data_msg.message_id, user.id)
     except Exception as e:
         logger.error(f"Failed to forward data to group: {e}")
 
@@ -323,25 +448,35 @@ async def save_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     thank_you_text = (
         "🎉 *Shukriya! Aapki details successfully save ho gayi!*\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "📅 *2 May 2026 raat 10 baje* aapko NEET 2026 Question Paper ki PDF bhejne ki koshish ki jaayegi.\n\n"
+        "⚠️ *Important: PDF sirf VERIFIED users ko milegi!*\n\n"
+        "✅ Verified hone ke liye *3 referrals compulsory* hain.\n"
+        "Bina 3 referrals ke PDF nahi milegi!\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "🔗 *Verification ke liye Referral karein!*\n\n"
-        "Ab *3 unique users* ko is bot ke paas refer karo *verified* hone ke liye:\n\n"
+        "📅 Verified users ko *2 May 2026 raat 10 baje* NEET 2026 Question Paper ki PDF bhejne ki koshish ki jaayegi.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🔗 *Abhi share karein apna Referral Link:*\n\n"
         f"`{referral_link}`\n\n"
         f"📊 *Aapki current referrals:* {ref_count}/3\n"
     )
 
     if refs_needed > 0:
-        thank_you_text += f"⚡ *{refs_needed} aur referral(s)* chahiye verification ke liye!\n\n"
+        thank_you_text += (
+            f"\n⚡ *{refs_needed} aur referral(s)* chahiye — abhi share karo!\n\n"
+        )
     else:
-        thank_you_text += "✅ *Aap already verified ho sakte hain!*\n\n"
+        thank_you_text += "\n✅ *Aapke 3 referrals complete hain! Verification processing...*\n\n"
 
     thank_you_text += (
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "💡 *Yaad rahe:* Jitna zyada aap refer karenge, *utna jaldi* aapko paper send kiya jaayega! 🚀"
+        "💡 *Jitna zyada refer karoge, utna pehle paper milega!* 🚀"
     )
 
     await update.message.reply_text(thank_you_text, parse_mode="Markdown")
+
+    if ref_count >= 3:
+        already_verified = await is_verified(user.id)
+        if not already_verified:
+            await check_and_notify_referrer(context, user.id)
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -365,16 +500,38 @@ async def referral_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     referral_link = f"https://t.me/{bot_username}?start={user.id}"
     ref_count = await get_referral_count(user.id)
     verified = await is_verified(user.id)
+    refs_needed = max(0, 3 - ref_count)
 
     status_text = (
         f"📊 *Aapka Referral Status*\n\n"
         f"👥 *Total Referrals:* {ref_count}/3\n"
-        f"✅ *Verified:* {'Haan! ✅' if verified else 'Nahi (3 referrals chahiye)'}\n\n"
+        f"✅ *Verified:* {'Haan! ✅' if verified else f'Nahi ❌ ({refs_needed} aur chahiye)'}\n\n"
+        f"⚠️ *Yaad rahe: PDF sirf verified users ko milegi!*\n"
+        f"Minimum *3 referrals compulsory* hain.\n\n"
         f"🔗 *Aapka Referral Link:*\n`{referral_link}`\n\n"
-        f"💡 Jitna zyada refer karenge, utna jaldi paper milega! 🚀"
+        f"💡 Jitna zyada refer karoge, utna jaldi aur pehle paper milega! 🚀"
     )
 
     await update.message.reply_text(status_text, parse_mode="Markdown")
+
+
+async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle all non-command messages from private chats — forward them to the group."""
+    if update.effective_chat.id == GROUP_CHAT_ID:
+        return
+
+    user = update.effective_user
+    if not user:
+        return
+
+    await ensure_user(
+        user_id=user.id,
+        username=user.username or "",
+        first_name=user.first_name or "",
+        last_name=user.last_name or ""
+    )
+
+    await forward_user_message_to_group(update, context)
 
 
 def main():
@@ -385,12 +542,12 @@ def main():
         states={
             MOBILE: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_mobile)],
             ALT_MOBILE: [
-                CommandHandler("skip", lambda u, c: handle_skip_alt_mobile(u, c)),
+                CommandHandler("skip", handle_skip_alt_mobile),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, received_alt_mobile),
             ],
             GMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_gmail)],
             ALT_GMAIL: [
-                CommandHandler("skip", lambda u, c: handle_skip_alt_gmail(u, c)),
+                CommandHandler("skip", handle_skip_alt_gmail),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, received_alt_gmail),
             ],
         },
@@ -400,6 +557,12 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("status", referral_status))
+
+    group_filter = filters.Chat(chat_id=GROUP_CHAT_ID) & filters.REPLY
+    app.add_handler(MessageHandler(group_filter, handle_group_reply))
+
+    private_filter = filters.ChatType.PRIVATE & ~filters.COMMAND
+    app.add_handler(MessageHandler(private_filter, handle_user_message))
 
     logger.info("Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
