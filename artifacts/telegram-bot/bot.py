@@ -131,14 +131,14 @@ async def forward_user_message_to_group(update: Update, context: ContextTypes.DE
         return
 
     try:
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        username_str = f"@{user.username}" if user.username else "(no username)"
         label_text = (
             f"📨 *Message from user:*\n"
-            f"👤 *Name:* {user.first_name or ''} {user.last_name or ''}".strip() + "\n"
-            f"🔖 *Username:* @{user.username}" if user.username else
-            f"📨 *Message from user:*\n"
-            f"👤 *Name:* {user.first_name or ''} {user.last_name or ''}".strip() + "\n"
-            f"🔖 *Username:* (no username)"
-        ) + f"\n🆔 *User ID:* `{user.id}`"
+            f"👤 *Name:* {full_name}\n"
+            f"🔖 *Username:* {username_str}\n"
+            f"🆔 *User ID:* `{user.id}`"
+        )
 
         label_msg = await context.bot.send_message(
             chat_id=GROUP_CHAT_ID,
@@ -565,7 +565,7 @@ def main():
     app.add_handler(MessageHandler(private_filter, handle_user_message))
 
     logger.info("Bot starting...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 
 async def handle_skip_alt_mobile(update: Update, context: ContextTypes.DEFAULT_TYPE):
