@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import asyncpg
+from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -573,12 +574,26 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     await forward_user_message_to_group(update, context)
 
 
-async def post_init(application):
+async def health_handler(request):
+    return web.Response(text="OK")
+
+
+async def run_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    app = web.Application()
+    app.router.add_get("/", health_handler)
+    app.router.add_get("/health", health_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Health server running on port {port}")
+
+
+async def run_bot():
+    app = Application.builder().token(BOT_TOKEN).build()
+
     await init_db()
-
-
-def main():
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("fill", fill_start)],
@@ -607,8 +622,22 @@ def main():
     private_filter = filters.ChatType.PRIVATE & ~filters.COMMAND
     app.add_handler(MessageHandler(private_filter, handle_user_message))
 
+    async with app:
+        await app.start()
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+        logger.info("Bot started, polling for updates...")
+        await asyncio.Event().wait()
+        await app.updater.stop()
+        await app.stop()
+
+
+def main():
+    async def run_all():
+        await run_health_server()
+        await run_bot()
+
     logger.info("Bot starting...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    asyncio.run(run_all())
 
 
 async def handle_skip_alt_mobile(update: Update, context: ContextTypes.DEFAULT_TYPE):
