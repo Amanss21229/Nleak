@@ -151,7 +151,7 @@ async def check_and_notify_referrer(context, referred_by: int):
                 text=(
                     "🎉 *Congratulations! Aap Verified Ho Gaye!*\n\n"
                     "Shukriya! Aapke *3 unique referrals* complete ho gaye hain.\n\n"
-                    "✅ *Ab aap verified hain!* Hum aapko *2 May 2026 raat 10 baje* "
+                    "✅ *Ab aap verified hain!* Hum aapko jald se jald "
                     "NEET 2026 Question Paper ki PDF bhejne ki koshish karenge.\n\n"
                     "📢 *Yaad rahe:* Jitna zyada aap refer karenge, utna *pehle* aapko paper send kiya jaayega!\n\n"
                     "Referral karte rahiye aur apna chance badhaiye! 🚀"
@@ -318,7 +318,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         f"🙏 *Namaste {user.first_name}!*\n\n"
         "📚 *NEET 2026 Question Paper Bot mein aapka swagat hai!*\n\n"
-        "📅 *2 May 2026 ko NEET ka Question Paper PDF send kiya jaayega.*\n\n"
+        "📅 *Mai ek Neet Aspirant hu, but jb maina dekha ki har saal paper leak ho jaata hai, to mujhe bura lga, isliyemaine ye bot banaya hai. so agr is saal v paper leak hua, to ham aapko e8ther mobile sms ya gmail pe send kar denge. Because Mobioe sms or gmail sabse jaada safe hai. agr mai aapko telegram pe, telegram group pe ya whatsapp pe paper send karunga, to ye mere liye risky ho sakta hai. so paper either sms or gmail se hi send hoga. agr aap interested ho to neeche ke furthur step padho*\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "⚠️ *PDF sirf VERIFIED users ko milegi!*\n\n"
         "✅ Verified hone ke liye *minimum 3 unique users* ko refer karna *compulsory* hai.\n\n"
