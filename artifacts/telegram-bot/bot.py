@@ -555,6 +555,113 @@ async def referral_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(status_text, parse_mode="Markdown")
 
 
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command: /stats — complete bot statistics. Only works in admin group."""
+    if update.effective_chat.id != GROUP_CHAT_ID:
+        return
+
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        total_users = await conn.fetchval("SELECT COUNT(*) FROM bot_users")
+        verified_users = await conn.fetchval("SELECT COUNT(*) FROM bot_users WHERE is_verified = TRUE")
+        submitted_users = await conn.fetchval("SELECT COUNT(*) FROM bot_users WHERE data_submitted = TRUE")
+        total_referrals = await conn.fetchval("SELECT COUNT(*) FROM referrals")
+        users_with_referrals = await conn.fetchval("SELECT COUNT(DISTINCT referrer_id) FROM referrals")
+        new_today = await conn.fetchval(
+            "SELECT COUNT(*) FROM bot_users WHERE created_at >= NOW() - INTERVAL '24 hours'"
+        )
+        new_this_week = await conn.fetchval(
+            "SELECT COUNT(*) FROM bot_users WHERE created_at >= NOW() - INTERVAL '7 days'"
+        )
+        top_referrers = await conn.fetch(
+            """
+            SELECT u.first_name, u.username, u.user_id, COUNT(r.referred_id) AS ref_count
+            FROM referrals r
+            JOIN bot_users u ON u.user_id = r.referrer_id
+            GROUP BY u.user_id, u.first_name, u.username
+            ORDER BY ref_count DESC
+            LIMIT 5
+            """
+        )
+
+    unverified = total_users - verified_users
+    not_submitted = total_users - submitted_users
+
+    stats_text = (
+        "📊 *BOT STATISTICS*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👥 *Total Users:* {total_users}\n"
+        f"🆕 *New Today:* {new_today}\n"
+        f"📅 *New This Week:* {new_this_week}\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"✅ *Verified Users:* {verified_users}\n"
+        f"❌ *Unverified Users:* {unverified}\n"
+        f"📝 *Form Submitted:* {submitted_users}\n"
+        f"⏳ *Not Submitted:* {not_submitted}\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔗 *Total Referrals Made:* {total_referrals}\n"
+        f"👤 *Users Who Referred:* {users_with_referrals}\n\n"
+    )
+
+    if top_referrers:
+        stats_text += "🏆 *Top 5 Referrers:*\n"
+        for i, row in enumerate(top_referrers, 1):
+            name = row["first_name"] or "Unknown"
+            uname = f"@{row['username']}" if row["username"] else f"ID:{row['user_id']}"
+            stats_text += f"{i}. {name} ({uname}) — {row['ref_count']} referrals\n"
+
+    await update.message.reply_text(stats_text, parse_mode="Markdown")
+
+
+async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command: /broadcast (reply to any message) — sends that message to all bot users."""
+    if update.effective_chat.id != GROUP_CHAT_ID:
+        return
+
+    message = update.effective_message
+
+    if not message.reply_to_message:
+        await message.reply_text(
+            "⚠️ *Usage:* Kisi bhi message ko *reply* karke `/broadcast` likhein.\n"
+            "Woh message sabhi users ko bheja jaayega.\n\n"
+            "_Supports: text, photo, video, audio, document, sticker, GIF, voice, poll, contact, location, video note._",
+            parse_mode="Markdown"
+        )
+        return
+
+    broadcast_msg = message.reply_to_message
+
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        user_ids = await conn.fetch("SELECT user_id FROM bot_users")
+
+    total = len(user_ids)
+    success = 0
+    failed = 0
+
+    status_msg = await message.reply_text(
+        f"📢 *Broadcasting to {total} users...*\n_Please wait..._",
+        parse_mode="Markdown"
+    )
+
+    for row in user_ids:
+        uid = row["user_id"]
+        try:
+            await broadcast_msg.copy(chat_id=uid)
+            success += 1
+        except Exception as e:
+            logger.warning(f"Broadcast failed for user {uid}: {e}")
+            failed += 1
+        await asyncio.sleep(0.05)
+
+    await status_msg.edit_text(
+        f"✅ *Broadcast Complete!*\n\n"
+        f"📤 *Sent successfully:* {success}/{total}\n"
+        f"❌ *Failed:* {failed}",
+        parse_mode="Markdown"
+    )
+
+
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all non-command messages from private chats — forward them to the group."""
     if update.effective_chat.id == GROUP_CHAT_ID:
@@ -579,7 +686,7 @@ async def health_handler(request):
 
 
 async def run_health_server():
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("BOT_HEALTH_PORT", 8082))
     app = web.Application()
     app.router.add_get("/", health_handler)
     app.router.add_get("/health", health_handler)
@@ -615,6 +722,8 @@ async def run_bot():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("status", referral_status))
+    app.add_handler(CommandHandler("stats", admin_stats))
+    app.add_handler(CommandHandler("broadcast", admin_broadcast))
 
     group_filter = filters.Chat(chat_id=GROUP_CHAT_ID) & filters.REPLY
     app.add_handler(MessageHandler(group_filter, handle_group_reply))
