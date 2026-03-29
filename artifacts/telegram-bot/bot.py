@@ -23,7 +23,19 @@ BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GROUP_CHAT_ID = int(os.environ["TELEGRAM_GROUP_CHAT_ID"])
 DATABASE_URL = os.environ["DATABASE_URL"]
 
+ADMIN_IDS = {8162524828}
+
 MOBILE, ALT_MOBILE, GMAIL, ALT_GMAIL = range(4)
+
+
+def is_admin(update: Update) -> bool:
+    """Returns True if the sender is a designated admin or the message is from the admin group."""
+    user = update.effective_user
+    if user and user.id in ADMIN_IDS:
+        return True
+    if update.effective_chat and update.effective_chat.id == GROUP_CHAT_ID:
+        return True
+    return False
 
 db_pool = None
 
@@ -556,8 +568,9 @@ async def referral_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin command: /stats — complete bot statistics. Only works in admin group."""
-    if update.effective_chat.id != GROUP_CHAT_ID:
+    """Admin command: /stats — complete bot statistics. Admin only."""
+    if not is_admin(update):
+        await update.message.reply_text("⛔ You are not authorized to use this command.")
         return
 
     pool = await get_db()
@@ -615,7 +628,8 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command: /broadcast (reply to any message) — sends that message to all bot users."""
-    if update.effective_chat.id != GROUP_CHAT_ID:
+    if not is_admin(update):
+        await update.message.reply_text("⛔ You are not authorized to use this command.")
         return
 
     message = update.effective_message
